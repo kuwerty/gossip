@@ -4,7 +4,7 @@ Gossip integrates [Go](http://golang.org) templates with a markdown to HTML proc
 
 Its sweetspot is generating single page HTML documentation for Go projects (where the output of godoc might not work very well).  Using the [template language](http://golang.org/pkg/text/template/) of Go you can integrate multiple CSS, JS and markdown documents into a single file. Maybe for publishing on github-pages.
 
-Gossip is a command line utility that extends the Go template language with additional functions documented below.
+Gossip is a command line utility that extends the Go template language with additional markdown processing functions documented below.
 
 # Install
 ```
@@ -14,10 +14,10 @@ go get github.com/kuwerty/gossip
 # Usage
 Invoke with
 ```
-gossip source/index.html >public/index.html
+gossip -server source/index.html >public/index.html
 ```
 
-Gossip will treat all files found in the 'source' directory as template files and compile them. It then executes the template named 'index.html'.
+Gossip reads each file on the command line in turn.  All files found in the 'source' directory are parsed as template files and compiled. We then execute the template named 'index.html'. The output is written to stdout.
 
 After compilation it starts a HTTP server on port 5000 that serves up the contents of the public directory for viewing.
 

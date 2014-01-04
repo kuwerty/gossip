@@ -10,6 +10,7 @@ import (
     "bytes"
     "path"
     "strings"
+    "os/exec"
     "path/filepath"
     "github.com/russross/blackfriday"
     "net/http"
@@ -19,12 +20,19 @@ func printf(format string, args ...interface{}) {
     fmt.Fprintf(os.Stderr, format, args...)
 }
 
-
 func abort(format string, args ...interface{}) {
     fmt.Fprintf(os.Stderr, format, args...)
     fmt.Fprintln(os.Stderr, "")
     os.Exit(1)
 }
+
+
+//
+// Scope is a nested map of keys to values used as the context in template
+// execution. Templates can use the {{ .Value "foo" }} notation to search
+// parent scopes or just {{ .foo }} to search the local scope.
+//
+type KeyVals map[string]string
 
 type Scope struct {
     parent  *Scope
@@ -44,6 +52,10 @@ func (s *Scope) Value(name string) interface{} {
     return nil
 }
 
+
+//
+// Generator is the main 
+//
 type Generator struct {
     Master  *template.Template
     Funcs   template.FuncMap
@@ -62,12 +74,11 @@ func (g *Generator) Parse(contents string) *template.Template {
     return template.Must(t.Parse(contents))
 }
 
-func (g *Generator) PushScope() {
-    scope := &Scope{
-        values : make(map[string]string),
+func (g *Generator) PushScope(values KeyVals) {
+    g.Scope = &Scope{
+        values : values,
+        parent : g.Scope,
     }
-    scope.parent = g.Scope
-    g.Scope = scope
 }
 
 func (g *Generator) PopScope() {
@@ -76,23 +87,28 @@ func (g *Generator) PopScope() {
     }
 }
 
+func (g *Generator) ParseArgs(args []string) KeyVals {
 
-func (g *Generator) macro(name string, args ...string) string {
-    printf("macro %s %s\n", name, strings.Join(args, ","))
+    res := make(KeyVals)
 
-    // create new scope
-    g.PushScope()
-    defer g.PopScope()
-
-    // parse args
     for _, arg := range(args) {
         kv := strings.SplitN(arg, "=", 2)
         if len(kv) != 2 {
             abort("bad argument %s\n", arg)
         } else {
-            g.Scope.values[kv[0]] = kv[1]
+            res[kv[0]] = kv[1]
         }
     }
+
+    return res
+}
+
+func (g *Generator) macro(name string, args ...string) string {
+    printf("macro %s %s\n", name, strings.Join(args, ","))
+
+    // create new scope
+    g.PushScope(g.ParseArgs(args))
+    defer g.PopScope()
 
     // look up macro name
     buf := bytes.NewBuffer(nil)
@@ -104,7 +120,27 @@ func (g *Generator) macro(name string, args ...string) string {
     return buf.String()
 }
 
-func (g *Generator) markdown(filename string) string {
+func (g *Generator) markdown(filename string, args ...string) string {
+    // read mark down file
+    contents, err := ioutil.ReadFile(filename)
+    if err != nil {
+        abort( "error reading %s: %s\n", filename, err )
+    }
+
+    // parse markdown using template language
+    t := g.Parse(string(contents))
+
+    // create new scope and execute the template
+    g.PushScope(g.ParseArgs(args))
+    defer g.PopScope()
+
+    buf := bytes.NewBuffer(nil)
+    err = t.Execute(buf, nil)
+    if err != nil {
+        abort("ff%s", err)
+    }
+
+    // convert markdown to html
     basename  := path.Base(filename)
     extension := path.Ext(basename)
     name      := basename[0:len(basename)-len(extension)]
@@ -114,73 +150,76 @@ func (g *Generator) markdown(filename string) string {
 
     renderer := blackfriday.HtmlRenderer(htmlFlags, name, "")
 
-    contents, err := ioutil.ReadFile(filename)
-    if err != nil {
-        abort( "error reading %s: %s\n", filename, err )
-    }
-
-    t := g.Parse(string(contents))
-
-    buf := bytes.NewBuffer(nil)
-
-    err = t.Execute(buf, nil)
-    if err != nil {
-        abort("ff%s", err)
-    }
-
     html := blackfriday.Markdown(buf.Bytes(), renderer, blackfriday.EXTENSION_AUTOLINK)
 
     return string(html)
 }
 
+
+
 func main() {
-    var flgIndex = flag.String("index", "index.html", "specify index file to render")
+    var flgServer = flag.Bool("server", false, "start http server after compilation")
 
     flag.Parse()
 
-    if flgIndex == nil {
-        abort("must specify an index")
-    }
+    for _,arg := range flag.Args() {
+        g := new(Generator)
 
-    index := *flgIndex;
-
-
-    g := new(Generator)
-
-    g.Funcs = template.FuncMap {
-        "macro"     : g.macro,
-        "markdown"  : g.markdown,
-    }
-
-    g.Master = template.New("master").Funcs(g.Funcs)
-
-    walk := func(filename string, info os.FileInfo, err error) error {
-
-        if info != nil && !info.IsDir() {
-            printf("template:%s\n", filename)
-
-            g.Compile(filename)
+        g.Funcs = template.FuncMap {
+            "macro"     : g.macro,
+            "markdown"  : g.markdown,
         }
 
-        return nil
-    }
+        g.Master = template.New("master").Funcs(g.Funcs)
 
-    for _,arg := range flag.Args() {
+
         dir := path.Dir(arg)
+        name := path.Base(arg)
 
-        os.Chdir(dir)
+        printf("directory %s\n", arg)
 
-        filepath.Walk(".", walk)
+        err := os.Chdir(dir)
+        if err != nil {
+            abort("%s", err)
+        }
+
+        // parse all the templates we can find.
+        filepath.Walk(".", func(filename string, info os.FileInfo, err error) error {
+
+            if info != nil && !info.IsDir() {
+                printf("  template:%s\n", filename)
+
+                g.Compile(filename)
+            }
+
+            return nil
+        })
+
+        printf("  executing:%s\n", name)
+
+        err = g.Master.ExecuteTemplate(os.Stdout, name, nil)
+        if err != nil {
+            abort("%s", err)
+        }
     }
 
-    err := g.Master.ExecuteTemplate(os.Stdout, index, nil)
-    if err != nil {
-        abort("%s", err)
+    //
+    // Start server if requested
+    //
+    if *flgServer {
+        go func() {
+            http.Handle("/", http.FileServer(http.Dir("../public")))
+
+            printf("listening on http://127.0.0.1:5000/\n")
+
+            log.Fatal(http.ListenAndServe(":5000", nil))
+        }()
+
+        // start a browser. there is a race condition but the chances
+        // of chrome or safari starting up before the server is tiny.
+        exec.Command("open", "http://127.0.0.1:5000/").Run()
+
+        // sleep forever
+        select{}
     }
-
-    http.Handle("/", http.FileServer(http.Dir("../public")))
-
-    printf("listening on http://127.0.0.1:5000/")
-
-    log.Fatal(http.ListenAndServe(":5000", nil))
 }
