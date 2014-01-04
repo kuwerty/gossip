@@ -1,10 +1,9 @@
 Gossip
 ======
-Gossip integrates [Go](http://golang.org) templates with a markdown to HTML processor.
+Gossip integrates [Go](http://golang.org) templates with a markdown to HTML processor. It is a command line utility that extends the Go template language with additional processing functions explained below.
 
-Its sweetspot is generating single page HTML documentation for Go projects (where the output of godoc might not work very well).  Using the [template language](http://golang.org/pkg/text/template/) of Go you can integrate multiple CSS, JS and markdown documents into a single file. Maybe for publishing on github-pages.
+Its sweetspot is generating single page HTML documentation for projects.  Using the [template language](http://golang.org/pkg/text/template/) of Go you can integrate multiple CSS, JS and markdown documents into a single file.
 
-Gossip is a command line utility that extends the Go template language with additional markdown processing functions documented below.
 
 # Install
 ```
@@ -12,14 +11,17 @@ go get github.com/kuwerty/gossip
 ```
 
 # Usage
-Invoke with
+The example can be compiled with
+
 ```
-gossip -server source/index.html >public/index.html
+gossip -server -D Title=test -o example/public/index.html example/index.html
 ```
 
-Gossip reads each file on the command line in turn.  All files found in the 'source' directory are parsed as template files and compiled. We then execute the template named 'index.html'. The output is written to stdout.
+After the flags have been stripped, Gossip treats each argument on the command line in turn.  For each argument, any files found in the same directory are treated as template files and compiled. It then uses the named file as the root of template instantiation.
 
-After compilation it starts a HTTP server on port 5000 that serves up the contents of the public directory for viewing.
+The -D option defines a key=value pair for the initial template context. In this case we set 'Title' to 'test' which the template uses to set the HTML title of the page.
+
+If the -server option is supplied then after compilation Gossip starts an HTTP server on port 5000 that serves up the contents of the public directory for viewing.
 
 
 # Markdown Function

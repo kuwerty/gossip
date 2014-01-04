@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+  <title>{{ .Title }} {{/* Title is supplied on the command line with the -D option */}}</title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <style type="text/css">
+      {{template "roryg-ghostwriter.css"}}
+    </style>
+  </head>
+  <body>
+
+  <div style="margin-left:10%; margin-right:10%;">
+      {{ markdown "test.md" }}
+  </div>
+  </body>
+</html>
