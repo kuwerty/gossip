@@ -14,15 +14,14 @@ go get github.com/kuwerty/gossip
 The example can be compiled with
 
 ```
-gossip -server -D Title=test -o example/public/index.html example/index.html
+gossip -server -D Title=test -o example/public/index.html example/index.html example/roryg-ghostwriter.css example/test.md
 ```
 
-After the flags have been stripped, Gossip treats each argument on the command line in turn.  For each argument, any files found in the same directory are treated as template files and compiled. It then uses the named file as the root of template instantiation.
+All arguments listed on the command line are compiled as templates. The template names are set to the basename of the corresponding source file. The first file listed is then used as the entry point for template execution.
 
-The -D option defines a key=value pair for the initial template context. In this case we set 'Title' to 'test' which the template uses to set the HTML title of the page.
+A -D option (can be used multiple times) defines a key=value pair for the initial template context. In this case we set 'Title' to 'test' which the template uses to set the HTML title of the page.
 
 If the -server option is supplied then after compilation Gossip starts an HTTP server on port 5000 that serves up the contents of the public directory for viewing.
-
 
 # Markdown Function
 gossip extends the template language with a function named 'markdown':
@@ -34,6 +33,8 @@ gossip extends the template language with a function named 'markdown':
 The markdown function first expands any templates in the markdown and then uses the [blackfriday](https://github.com/russross/blackfriday) markdown parser to transform the result into HTML.
 
 The markdown function also supports arguments as described in the macro function below.
+
+Some arguments are recognized by the markdown function. 'toc=true' will direct the markdown processor to generate a TOC automatically.
 
 # Macro Function
 gossip extends the template language with a function named 'macro'.
@@ -49,3 +50,15 @@ Inside snippet.html the arguments are available to the template, e.g.
 {{.text}}
 </div>
 ```
+
+macro can use any valid template name so an alternative is to use it in conjuction with the `define` keyword:
+```
+{{define "snippet"}}
+<div class={{.class}}>
+{{.text}}
+</div>
+
+{{ macro "snippet" "text=important" "class=big" }}
+{{ macro "snippet" "text=not so much" "class=small" }}
+```
+

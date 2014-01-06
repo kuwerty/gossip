@@ -6,7 +6,6 @@ import (
     "fmt"
     "log"
     "os"
-    "io/ioutil"
     "bytes"
     "path"
     "strings"
@@ -86,8 +85,8 @@ func (g *Generator) Compile(filename string) *template.Template {
     return template.Must(t.ParseFiles(filename))
 }
 
-func (g *Generator) Parse(contents string) *template.Template {
-    t := g.Master.New("").Funcs(g.Funcs)
+func (g *Generator) Parse(name string, contents string) *template.Template {
+    t := g.Master.New(name).Funcs(g.Funcs)
 
     return template.Must(t.Parse(contents))
 }
@@ -134,15 +133,12 @@ func (g *Generator) macro(name string, args ...string) string {
     return buf.String()
 }
 
-func (g *Generator) markdown(filename string, argsv ...string) string {
-    // read mark down file
-    contents, err := ioutil.ReadFile(filename)
-    if err != nil {
-        abort( "error reading %s: %s\n", filename, err )
+func (g *Generator) markdown(name string, argsv ...string) string {
+    // find template with correct name
+    t := g.Master.Lookup(name)
+    if t == nil {
+        abort("cannot find template '%s' (used as markdown function argument)", name)
     }
-
-    // parse markdown using template language
-    t := g.Parse(string(contents))
 
     // create new scope and execute the template
     args := g.ParseArgs(argsv)
@@ -150,7 +146,7 @@ func (g *Generator) markdown(filename string, argsv ...string) string {
     defer g.PopScope()
 
     buf := bytes.NewBuffer(nil)
-    err = t.Execute(buf, nil)
+    err := t.Execute(buf, nil)
     if err != nil {
         abort("ff%s", err)
     }
@@ -179,11 +175,11 @@ func (g *Generator) markdown(filename string, argsv ...string) string {
     }
 
     // convert markdown to html
-    basename  := path.Base(filename)
+    basename  := path.Base(name)
     extension := path.Ext(basename)
-    name      := basename[0:len(basename)-len(extension)]
+    mdname    := basename[0:len(basename)-len(extension)]
 
-    renderer := blackfriday.HtmlRenderer(htmlFlags, name, "")
+    renderer := blackfriday.HtmlRenderer(htmlFlags, mdname, "")
 
     html := blackfriday.Markdown(buf.Bytes(), renderer, extensions)
 
@@ -224,52 +220,35 @@ func main() {
         abort("cannot open output: %s", err)
     }
 
-    for _,arg := range flag.Args() {
-        g := new(Generator)
+    pwd,_ := os.Getwd()
 
-        g.Funcs = template.FuncMap {
-            "macro"     : g.macro,
-            "markdown"  : g.markdown,
-        }
+    g := new(Generator)
 
-        g.Master = template.New("master").Funcs(g.Funcs)
-
-        g.PushScope(g.ParseArgs(defines))
-        defer g.PopScope()
-
-        dir := path.Dir(arg)
-        name := path.Base(arg)
-
-        printf("directory %s\n", dir)
-
-        err := os.Chdir(dir)
-        if err != nil {
-            abort("%s", err)
-        }
-
-        // parse all the templates we can find.
-        filepath.Walk(".", func(filename string, info os.FileInfo, err error) error {
-
-            if info != nil && info.IsDir() && filename != "." {
-                return filepath.SkipDir
-            }
-
-            if info != nil && !info.IsDir() {
-                printf("  template:%s\n", filename)
-
-                g.Compile(filename)
-            }
-
-            return nil
-        })
-
-        printf("  executing:%s\n", name)
-
-        err = g.Master.ExecuteTemplate(outputWriter, name, g.Scope.values)
-        if err != nil {
-            abort("%s", err)
-        }
+    g.Funcs = template.FuncMap {
+        "macro"     : g.macro,
+        "markdown"  : g.markdown,
     }
+
+    g.Master = template.New("master").Funcs(g.Funcs)
+
+    g.PushScope(g.ParseArgs(defines))
+
+    for _,arg := range flag.Args() {
+        printf("compiling:%s\n", arg)
+
+        g.Compile(arg)
+    }
+
+    main := filepath.Base(flag.Arg(0))
+
+    printf("executing:%s\n", main)
+
+    err = g.Master.ExecuteTemplate(outputWriter, main, g.Scope.values)
+    if err != nil {
+        abort("%s", err)
+    }
+
+    defer g.PopScope()
 
     outputWriter.Close()
 
@@ -278,7 +257,7 @@ func main() {
     //
     if *flgServer {
         go func() {
-            dir := filepath.Dir(output)
+            dir := pwd + "/" + filepath.Dir(output)
 
             http.Handle("/", http.FileServer(http.Dir(dir)))
 
