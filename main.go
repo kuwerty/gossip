@@ -85,6 +85,14 @@ type Generator struct {
 func (g *Generator) Compile(filename string) *template.Template {
     t := g.Master.New(filename).Funcs(g.Funcs)
 
+    if useHtmlDelims {
+        if strings.HasSuffix(filename, ".html") || strings.HasSuffix(filename, ".htm") ||
+           strings.HasSuffix(filename, ".xml") || strings.HasSuffix(filename, ".xhtml") {
+
+            t.Delims("<!--", "-->")
+        }
+    }
+
     return template.Must(t.ParseFiles(filename))
 }
 
@@ -234,7 +242,9 @@ func main() {
     flag.StringVar(&output, "output", "", "output file.")
     flag.StringVar(&output, "o",      "", "output file.")
 
-    flag.Var(&defines, "D", "define values for the initial context")
+    flag.BoolVar(&useHtmlDelims, "html", false, "Switch HTML template delimiters to <!-- --> in HTML files.")
+
+    flag.Var(&defines, "D", "define values for the initial context in form KEY=VALUE, e.g -D GOSSIP=1")
 
     flag.Parse()
 

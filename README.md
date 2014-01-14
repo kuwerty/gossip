@@ -62,3 +62,43 @@ macro can use any valid template name so an alternative is to use it in conjucti
 {{ macro "snippet" "text=not so much" "class=small" }}
 ```
 
+
+
+# Include Function
+gossip extends the template language with a function named 'include'.
+
+The argument is included directly without any template processing.
+
+```
+<div class={{.class}}>
+{{include "some_content.html"}}
+</div>
+```
+
+
+
+# Closure Function
+gossip extends the template language with a function named 'closure'.
+
+This command invokes the [closure-compiler](https://developers.google.com/closure/compiler/).
+
+The arguments are joined together with spaces and used as the arguments
+to invoke closure-compiler. The compiler must be on the path.
+
+The arguments should not specify an output file, we will collect the output of closure and
+use it.
+
+Assuming html delimiters are enabled (--html) and the following switches between invoking
+closure to compile the javascript or invoking closure to generate a minified, concatenated
+version of the javascript.
+
+```
+<!-- if CLOSURE -->
+<!-- clojure "--js jquery.js --js app.js" -->
+<!-- else -->
+<script ... src="jquery.js"></script>
+<script ... src="app.js"></script>
+<!-- end -->
+```
+
+
