@@ -6,15 +6,18 @@ import (
     "fmt"
     "log"
     "os"
+    "os/exec"
     "bytes"
     "path"
     "strings"
     "strconv"
-    "os/exec"
     "path/filepath"
     "github.com/russross/blackfriday"
     "net/http"
 )
+
+var useHtmlDelims = false
+
 
 func printf(format string, args ...interface{}) {
     fmt.Fprintf(os.Stderr, format, args...)
@@ -187,6 +190,32 @@ func (g *Generator) markdown(name string, argsv ...string) string {
 }
 
 
+func (g *Generator) include(filename string) string {
+    printf("include %s\n", filename)
+
+    // ho ho ho (shell expansion)
+    buf, err := exec.Command("bash", "-c", "cat "+filename).Output()
+    if err != nil {
+        abort("%s with %s", err, string(buf))
+    }
+
+    return string(buf)
+}
+
+func (g *Generator) closure(argsv ...string) string {
+    cmdargs := strings.Join(argsv, " ")
+
+    printf("closure-compiler %s\n", cmdargs)
+
+    // use bash to invoke and split the args
+    buf, err := exec.Command("bash", "-c", "closure-compiler "+cmdargs).Output()
+    if err != nil {
+        abort("%s with %s", err, string(buf))
+    }
+
+    return string(buf)
+}
+
 
 // Need a type to store multiple string arguments
 type stringslice []string
@@ -227,6 +256,9 @@ func main() {
     g.Funcs = template.FuncMap {
         "macro"     : g.macro,
         "markdown"  : g.markdown,
+        "include"   : g.include,
+        "closure"   : g.closure,
+        "GOSSIP"    : func() string { return "YES" },
     }
 
     g.Master = template.New("master").Funcs(g.Funcs)
